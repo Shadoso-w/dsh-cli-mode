@@ -1,0 +1,12 @@
+# Normalize every text file to LF in the repository; the JavaScript sources are
+# plain ESM and the browser half is a hand-written bundle, so there is nothing
+# to build and no generated artifact to protect from line-ending churn.
+* text=auto eol=lf
+
+# Binary assets keep their bytes.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary

@@ -1,0 +1,6 @@
+# dsh bundle layer: mount the command-line-mode plugin (lib/index.js via the
+# package root export) plus its browser half (exports["./client"], discovered
+# through the package.json dsh.client declaration).
+- insert:
+    - id: dsh-cli-mode
+      name: dsh-cli-mode

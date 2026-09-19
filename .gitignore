@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Secrets — a token belongs in the Harness home's .env ($DSH_HOME/.env), never
+# in a repository. This line is a safety net for anyone who puts one here by
+# mistake: dsh reads the INVOKING DIRECTORY's .env as a layer, so a stray file
+# in a checkout is applied, not ignored.
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Logs and local scratch
+*.log
+*.tmp
+tmp/
+.cache/
