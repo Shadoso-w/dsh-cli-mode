@@ -3,6 +3,25 @@
   "description": "Command-line mode for the DeepSeek Harness web GUI: a composer line starting with ！ or ! runs as a real command in the session workspace instead of being sent to the model",
   "version": "1.1.0",
   "license": "MIT",
+  "author": "Shadoso",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shadoso-w/dsh-cli-mode.git"
+  },
+  "homepage": "https://github.com/Shadoso-w/dsh-cli-mode#readme",
+  "bugs": {
+    "url": "https://github.com/Shadoso-w/dsh-cli-mode/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "web-ui",
+    "composer",
+    "command-line",
+    "shell"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "exports": {

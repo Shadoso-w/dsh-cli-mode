@@ -77,7 +77,7 @@ globalThis.fetch = (url, options) => {
   const body = options && options.body ? JSON.parse(options.body) : undefined
   fetchCalls.push({ url, body })
   if (url.endsWith('/workdir')) return Promise.resolve({ ok: true, json: async () => ({ workdir: '/workspace/demo' }) })
-  if (url.endsWith('/exec')) return Promise.resolve({ ok: true, json: async () => ({ ok: true, command: body.command, stdout: '11.19.0', workdir: '/workspace/demo', message: '`' + body.command + '` 命令已执行' }) })
+  if (url.endsWith('/exec')) return Promise.resolve({ ok: true, json: async () => ({ ok: true, command: body.command, stdout: 'fixture-stdout', workdir: '/workspace/demo', message: '`' + body.command + '` 命令已执行' }) })
   if (url.endsWith('/history')) return Promise.resolve({ ok: true, json: async () => ({ entries: [] }) })
   return Promise.resolve({ ok: true, json: async () => ({}) })
 }
@@ -183,7 +183,7 @@ const deepText = (node, out = []) => {
   return out
 }
 const text = deepText(dockTree).join(' | ')
-check('result card reports the executed command', text.includes('命令已执行') && text.includes('npm --version') && text.includes('11.19.0'), text.slice(0, 200))
+check('result card reports the executed command', text.includes('命令已执行') && text.includes('npm --version') && text.includes('fixture-stdout'), text.slice(0, 200))
 
 const failed = results.filter((r) => !r.ok)
 console.log('\n' + String(results.length - failed.length) + '/' + String(results.length) + ' client-half checks passed')

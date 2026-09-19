@@ -13,6 +13,13 @@ const check = (label, ok, detail = '') => {
   console.log((ok ? 'PASS ' : 'FAIL ') + label + (detail === '' ? '' : ' — ' + detail))
 }
 
+// Synthetic request authority for the fabricated `req` objects below. This is
+// NOT deployment configuration: the handlers are invoked directly, and the
+// fence only compares this Host against the request Origin, so any loopback
+// authority works and no server is ever contacted.
+const TEST_HOST = '127.0.0.1:3080'
+const TEST_ORIGIN = 'http://' + TEST_HOST
+
 const routes = new Map()
 const logs = []
 const session = { header: { cwd: process.cwd() } }
@@ -84,7 +91,7 @@ const ctx = {
 }
 apply(ctx)
 
-async function post(path, body, headers = { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' }) {
+async function post(path, body, headers = { host: TEST_HOST, origin: TEST_ORIGIN }) {
   const chunks = [Buffer.from(JSON.stringify(body), 'utf8')]
   const req = {
     method: 'POST',
@@ -130,7 +137,7 @@ apply({
 })
 {
   const chunks = [Buffer.from('{"command":"!npm --version","sessionId":"' + sessionId + '"}', 'utf8')]
-  const req = { method: 'POST', headers: { host: '127.0.0.1:3080' }, on() {}, off() {}, async *[Symbol.asyncIterator]() { for (const c of chunks) yield c } }
+  const req = { method: 'POST', headers: { host: TEST_HOST }, on() {}, off() {}, async *[Symbol.asyncIterator]() { for (const c of chunks) yield c } }
   let done
   const settled = new Promise((r) => { done = r })
   const res = { status: 0, payload: undefined, writableEnded: false, destroyed: false, writeHead(s) { this.status = s }, end(b) { this.writableEnded = true; try { this.payload = JSON.parse(String(b)) } catch {} done() } }

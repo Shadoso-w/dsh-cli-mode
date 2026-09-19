@@ -12,6 +12,13 @@ const check = (label, ok, detail = '') => {
   console.log((ok ? 'PASS ' : 'FAIL ') + label + (detail === '' ? '' : ' — ' + detail))
 }
 
+// Synthetic request authority for the trust-fence cases below. This is NOT
+// deployment configuration: the handlers are called directly with fabricated
+// `req` objects, and the fence only compares this Host against the request
+// Origin, so any loopback authority works and no server is ever contacted.
+const TEST_HOST = '127.0.0.1:3080'
+const TEST_ORIGIN = 'http://' + TEST_HOST
+
 // --- Host half -------------------------------------------------------------
 const host = await import(new URL('lib/index.js', root).href)
 check('host exports name', host.name === 'cli-mode', host.name)
@@ -85,7 +92,7 @@ host.apply({
 check('no session gate still registers and warns', noGateRoutes.size === 4 && noGateLog.some((line) => line.includes('no connection service')), noGateLog.join(' | '))
 
 /** Build a minimal IncomingMessage/ServerResponse pair over one JSON body. */
-function callRoute(path, body, method = 'POST', headers = { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080', 'x-test-authed': 'yes' }) {
+function callRoute(path, body, method = 'POST', headers = { host: TEST_HOST, origin: TEST_ORIGIN, 'x-test-authed': 'yes' }) {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body), 'utf8')]
   const req = {
     method,
@@ -123,19 +130,19 @@ const execNoShell = await callRoute('/cli-mode/exec', { command: '!npm --version
 check('exec reports the missing shell service', /shell/.test(execNoShell.payload?.message ?? ''), execNoShell.payload?.message?.slice(0, 40))
 
 // Session gate first: an unauthenticated caller must not even reach the fence.
-const unauthenticated = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' })
+const unauthenticated = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: TEST_HOST, origin: TEST_ORIGIN })
 check('unauthenticated request is refused with 401', unauthenticated.status === 401, String(unauthenticated.status))
-const unauthenticatedWorkdir = await callRoute('/cli-mode/workdir', { sessionId: '' }, 'POST', { host: '127.0.0.1:3080' })
+const unauthenticatedWorkdir = await callRoute('/cli-mode/workdir', { sessionId: '' }, 'POST', { host: TEST_HOST })
 check('workdir is gated too', unauthenticatedWorkdir.status === 401, String(unauthenticatedWorkdir.status))
 
 // Trust fence: a page that is not this GUI must not be able to run commands.
 const foreignHost = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: 'evil.example.com', 'x-test-authed': 'yes' })
 check('foreign Host is refused', foreignHost.status === 403, String(foreignHost.status))
-const crossSite = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: '127.0.0.1:3080', origin: 'http://evil.example.com', 'x-test-authed': 'yes' })
+const crossSite = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: TEST_HOST, origin: 'http://evil.example.com', 'x-test-authed': 'yes' })
 check('cross-site Origin is refused', crossSite.status === 403, String(crossSite.status))
-const crossSiteFetch = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site', 'x-test-authed': 'yes' })
+const crossSiteFetch = await callRoute('/cli-mode/exec', { command: '!echo hi', sessionId: '' }, 'POST', { host: TEST_HOST, 'sec-fetch-site': 'cross-site', 'x-test-authed': 'yes' })
 check('sec-fetch-site cross-site is refused', crossSiteFetch.status === 403, String(crossSiteFetch.status))
-const noOrigin = await callRoute('/cli-mode/workdir', { sessionId: '' }, 'POST', { host: '127.0.0.1:3080', 'x-test-authed': 'yes' })
+const noOrigin = await callRoute('/cli-mode/workdir', { sessionId: '' }, 'POST', { host: TEST_HOST, 'x-test-authed': 'yes' })
 check('authenticated request without Origin is accepted', noOrigin.status === 200, String(noOrigin.status))
 
 const workdir = await callRoute('/cli-mode/workdir', { sessionId: '' })
@@ -150,9 +157,9 @@ const wrongMethod = await callRoute('/cli-mode/exec', undefined, 'GET')
 check('non-POST answers 405', wrongMethod.status === 405)
 
 // Read-only probe: the deployment diagnostic for the session gate.
-const probe = await callRoute('/cli-mode/probe', undefined, 'POST', { host: '127.0.0.1:3080', 'x-test-authed': 'yes', cookie: 'dsh=abc' })
+const probe = await callRoute('/cli-mode/probe', undefined, 'POST', { host: TEST_HOST, 'x-test-authed': 'yes', cookie: 'dsh=abc' })
 check('probe reports a resolved gate', probe.payload?.connectionResolved === true && probe.payload?.authenticated === true, JSON.stringify(probe.payload))
-const probeAnon = await callRoute('/cli-mode/probe', undefined, 'POST', { host: '127.0.0.1:3080' })
+const probeAnon = await callRoute('/cli-mode/probe', undefined, 'POST', { host: TEST_HOST })
 check('probe reports an unauthenticated caller', probeAnon.payload?.authenticated === false && probeAnon.payload?.connectionResolved === true, JSON.stringify(probeAnon.payload))
 check('probe names the gate doors it found', probe.payload?.gateShape === 'requestRejection+authorizeIndex', String(probe.payload?.gateShape))
 check('probe reports cookie presence without its value', probe.payload?.cookiePresent === true && !JSON.stringify(probe.payload).includes('dsh=abc'), JSON.stringify(probe.payload))
@@ -173,7 +180,7 @@ check('probe discloses no path or secret', !JSON.stringify(probe.payload).includ
     get: () => undefined,
   })
   const chunks = [Buffer.from('{}', 'utf8')]
-  const req = { method: 'POST', headers: { host: '127.0.0.1:3080', 'x-test-authed': 'yes' }, on() {}, off() {}, async *[Symbol.asyncIterator]() { for (const c of chunks) yield c } }
+  const req = { method: 'POST', headers: { host: TEST_HOST, 'x-test-authed': 'yes' }, on() {}, off() {}, async *[Symbol.asyncIterator]() { for (const c of chunks) yield c } }
   let done
   const settled = new Promise((r) => { done = r })
   const res = { status: 0, writableEnded: false, destroyed: false, writeHead(s) { this.status = s }, end() { this.writableEnded = true; done() } }

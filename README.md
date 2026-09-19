@@ -290,26 +290,30 @@ and a second insert composes the same row twice.
 
 ## Verify a deployment
 
-After a restart, the routes are observable without the browser:
+After a restart, the routes are observable without the browser. The `3080` below
+is the port `dsh web` ships by default — substitute whatever port it actually
+printed:
 
 ```sh
-curl -s -X POST http://127.0.0.1:3080/cli-mode/probe
+BASE=http://127.0.0.1:3080
+
+curl -s -X POST "$BASE/cli-mode/probe"
 # -> {"authenticated":false,"connectionResolved":true,...}
 #    connectionResolved:false means the session gate did not resolve (routes 401)
 #    a 405/404 here means the row did not mount
 
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:3080/cli-mode/exec \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/cli-mode/exec" \
   -H 'content-type: application/json' -d '{"command":"!npm --version","sessionId":""}'
 # -> 401    the session gate is enforced (expected from a bare shell)
 
-curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:3080/cli-mode/exec \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE/cli-mode/exec" \
   -H 'host: evil.example.com' -H 'content-type: application/json' -d '{"command":"!echo hi"}'
 # -> 401 or 403   never 200; the gate holds
 
-curl -s -X POST http://127.0.0.1:3080/cli-mode/exec \
+curl -s -X POST "$BASE/cli-mode/exec" \
   -H 'content-type: application/json' -H "cookie: <the browser cookie>" \
   -d '{"command":"!npm --version","sessionId":""}'
-# -> {"ok":true,...,"message":"`npm --version` 命令已执行","stdout":"11.19.0",...}
+# -> {"ok":true,...,"message":"`npm --version` 命令已执行","stdout":"<the command's stdout>",...}
 ```
 
 To exercise the full path from a shell, copy the authenticated URL printed by
