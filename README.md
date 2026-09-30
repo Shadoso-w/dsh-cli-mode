@@ -212,6 +212,28 @@ The browser half follows the same principle, from its own real failure:
    and a throwing selector fails *silently* — but for this feature the fix was
    to avoid the chain entirely rather than feed it a draft mirror.
 
+## Shell-service compatibility
+
+The `shell` service's execution method changed between DSH releases, so the
+plugin assumes **neither** name and picks whichever the composed service
+exposes:
+
+| Release | Contract |
+| --- | --- |
+| current | `execute(spec)` → `ShellExecution` handle; the result comes from `await handle.result()` |
+| legacy | `run(spec)` → `ShellRunResult` directly |
+
+A build that assumed only `run` failed on the desktop app with the exact
+message `命令执行通道失败：shell.run is not a function` — `resolve()` existed,
+so the failure surfaced only at the execution step. When neither door exists
+the plugin now reports the doors it *does* find
+(`… exposes neither execute() nor run() (available: start)`) instead of
+throwing a bare `x is not a function`, so the next contract change is
+diagnosable from the result card alone.
+
+`verify-e2e.mjs` exercises both contracts (and the no-door case), so a future
+drift fails a test rather than a user's command.
+
 ## Troubleshooting
 
 | Symptom | Meaning | Fix |
@@ -220,6 +242,7 @@ The browser half follows the same principle, from its own real failure:
 | `401` on every route | The session gate did not resolve | Check `POST /cli-mode/probe` → `connectionResolved: false`; report the warning line from the plugin log |
 | `403` from a browser | The page is not this GUI (foreign Origin/Host) | Use the URL printed by `dsh web` |
 | `404` on a `GET` to a route | Routes are POST-only | Use POST with a JSON body |
+| `shell.run is not a function` (or `execute`) | The deployment's shell service exposes the other execution door | Fixed since 1.2.0 — the plugin tries `execute()` then `run()` |
 | Input box never turns red | The browser half did not load or did not register | Open DevTools and check for a `cli-mode` error; the classic cause is a missing global (`document`) throwing at the top of `apply`, which the current build guards against |
 
 ## Why the routes ride `ctx.inject`

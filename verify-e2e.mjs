@@ -164,6 +164,100 @@ const histWrite = await post('/cli-mode/history', { sessionId, entries: ['npm --
 const histRead = await post('/cli-mode/history', { sessionId })
 check('history persists to disk and reads back', histWrite.status === 200 && JSON.stringify(histRead.payload?.entries) === JSON.stringify(['npm --version', 'git status']), JSON.stringify(histRead.payload))
 
+// --- Shell-service version compatibility ------------------------------------
+// The shell service's execution method changed between DSH releases:
+//   current: execute(spec) -> ShellExecution handle, result via handle.result()
+//   legacy:  run(spec)     -> ShellRunResult directly
+// A build that assumed only `run` failed on the desktop app with
+// "shell.run is not a function", so both doors are exercised here.
+{
+  const executeRoutes = new Map()
+  const executed = []
+  const executeShell = {
+    resolve(request) {
+      return {
+        command: request.command,
+        workdir: request.workdir ?? process.cwd(),
+        timeoutMs: request.timeoutMs ?? 120000,
+        stdoutMaxBytes: request.stdoutMaxBytes ?? 120000,
+      }
+    },
+    async execute(spec) {
+      executed.push(spec.command)
+      const result = {
+        exitCode: 0,
+        signal: null,
+        timedOut: false,
+        aborted: false,
+        timeoutMs: spec.timeoutMs,
+        stdout: { text: 'execute-door', truncated: false },
+        stderr: { text: '', truncated: false },
+      }
+      // The current contract hands back a process handle whose result() is the
+      // projection the caller awaits.
+      return {
+        status: 'completed',
+        exitCode: 0,
+        signal: null,
+        done: Promise.resolve(),
+        kill: () => false,
+        result: async () => result,
+      }
+    },
+  }
+  apply({
+    effect: (factory) => factory(),
+    logger: { info: () => {}, warn: () => {} },
+    inject: (n, cb) => cb({
+      webServer: { register: (r) => { executeRoutes.set(r.path, r.handler); return () => {} } },
+      get: (k) => (k === 'connection' ? { isAuthenticated: () => true } : undefined),
+      parent: undefined,
+    }),
+    get: (k) => {
+      if (k === 'sessions') return { get: (id) => (id === sessionId ? session : undefined) }
+      if (k === 'shell') return executeShell
+      return undefined
+    },
+  })
+  const chunks = [Buffer.from('{"command":"!echo execute-door","sessionId":"' + sessionId + '"}', 'utf8')]
+  const req = { method: 'POST', headers: { host: TEST_HOST, origin: TEST_ORIGIN }, on() {}, off() {}, async *[Symbol.asyncIterator]() { for (const c of chunks) yield c } }
+  let done
+  const settled = new Promise((r) => { done = r })
+  const res = { status: 0, payload: undefined, writableEnded: false, destroyed: false, writeHead(s) { this.status = s }, end(b) { this.writableEnded = true; try { this.payload = JSON.parse(String(b)) } catch {} done() } }
+  await executeRoutes.get('/cli-mode/exec')(req, res)
+  await settled
+  check('execute(spec) contract works (current DSH)', res.payload?.ok === true && res.payload?.stdout === 'execute-door', JSON.stringify({ ok: res.payload?.ok, stdout: res.payload?.stdout, message: res.payload?.message }))
+  check('execute() received the resolved spec', executed.length === 1 && executed[0] === 'echo execute-door', JSON.stringify(executed))
+}
+
+// A service exposing neither door must report the doors it does have rather
+// than surfacing a bare "x is not a function".
+{
+  const noDoorRoutes = new Map()
+  apply({
+    effect: (factory) => factory(),
+    logger: { info: () => {}, warn: () => {} },
+    inject: (n, cb) => cb({
+      webServer: { register: (r) => { noDoorRoutes.set(r.path, r.handler); return () => {} } },
+      get: (k) => (k === 'connection' ? { isAuthenticated: () => true } : undefined),
+      parent: undefined,
+    }),
+    get: (k) => {
+      if (k === 'sessions') return { get: (id) => (id === sessionId ? session : undefined) }
+      if (k === 'shell') return { resolve: (r) => ({ command: r.command, workdir: process.cwd(), timeoutMs: 1, stdoutMaxBytes: 1 }), start() {} }
+      return undefined
+    },
+  })
+  const chunks = [Buffer.from('{"command":"!echo x","sessionId":"' + sessionId + '"}', 'utf8')]
+  const req = { method: 'POST', headers: { host: TEST_HOST, origin: TEST_ORIGIN }, on() {}, off() {}, async *[Symbol.asyncIterator]() { for (const c of chunks) yield c } }
+  let done
+  const settled = new Promise((r) => { done = r })
+  const res = { status: 0, payload: undefined, writableEnded: false, destroyed: false, writeHead(s) { this.status = s }, end(b) { this.writableEnded = true; try { this.payload = JSON.parse(String(b)) } catch {} done() } }
+  await noDoorRoutes.get('/cli-mode/exec')(req, res)
+  await settled
+  check('a shell with no execution door names the doors it has', res.payload?.ok === false && /neither execute\(\) nor run\(\)/.test(res.payload?.message ?? '') && /start/.test(res.payload?.message ?? ''), String(res.payload?.message?.slice(0, 140)))
+}
+
 const failed = results.filter((r) => !r.ok)
 console.log('\n' + String(results.length - failed.length) + '/' + String(results.length) + ' end-to-end checks passed')
 if (failed.length > 0) {
