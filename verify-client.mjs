@@ -185,6 +185,29 @@ const deepText = (node, out = []) => {
 const text = deepText(dockTree).join(' | ')
 check('result card reports the executed command', text.includes('命令已执行') && text.includes('npm --version') && text.includes('fixture-stdout'), text.slice(0, 200))
 
+// The dock slot is a HORIZONTAL flex row shared with the host's ContextMeter, so
+// the card must carry its full-row layout inline instead of relying on the
+// injected stylesheet (a deployment was reported where only part of the row was
+// used because the row is a flex context, not the composer column).
+const findCard = (node) => {
+  if (node === null || node === undefined || typeof node !== 'object') return undefined
+  if (Array.isArray(node)) {
+    for (const c of node) { const hit = findCard(c); if (hit !== undefined) return hit }
+    return undefined
+  }
+  if (node.type === undefined) return undefined
+  if (node.props !== undefined && node.props.className === 'dsh-cli-mode-card') return node
+  for (const c of node.children ?? []) { const hit = findCard(c); if (hit !== undefined) return hit }
+  return undefined
+}
+const card = findCard(dockTree)
+const cardStyle = card === undefined ? {} : (card.props.style ?? {})
+check('card fills the dock row with inline flex (not stylesheet-dependent)',
+  cardStyle.flex === '1 1 100%' && cardStyle.alignSelf === 'stretch' && cardStyle.width === '100%' &&
+  cardStyle.minWidth === 0 && typeof cardStyle.maxWidth === 'string' && cardStyle.maxWidth.includes('--dsh-composer-card-max-width'),
+  JSON.stringify(cardStyle))
+check('card carries the full-width hook and a state accent', card !== undefined && card.props['data-full-width'] === 'true' && typeof cardStyle.borderLeft === 'string' && cardStyle.borderLeft.includes('3px solid'), JSON.stringify({ hook: card?.props['data-full-width'], borderLeft: cardStyle.borderLeft }))
+
 const failed = results.filter((r) => !r.ok)
 console.log('\n' + String(results.length - failed.length) + '/' + String(results.length) + ' client-half checks passed')
 if (failed.length > 0) {

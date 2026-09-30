@@ -28,7 +28,7 @@ dsh-cli-mode/
 
 - **Host 半**是普通 ESM cordis 插件（`export const name` + `export function apply(ctx)`），只通过 `ctx.get()` 读取 `webServer` / `shell` / `sessions` / `sandboxPolicy`，不引入任何 `@deepseek-ai/*` 依赖。
 - **浏览器半**手写在 lazy-CJS 客户端包协议里（`window.__ModuleLoader__.load({ id, factory })`），因此**不需要构建步骤**；`require` 只取平台种子模块（`react`），与 Host 的通信使用同源 `fetch` 到插件自己的路由。
-- 两个插槽：`conversation.composer`（chain，检测到标记时接管输入区）与 `conversation.composer.dock`（list，结果卡）。
+- 两个插槽：`conversation.input.overlay`（list，监听草稿以切换红色模式）与 `conversation.composer.dock`（list，结果卡）。**注意 `composer.dock` 在宿主里是横向 flex 行**（与宿主的 `ContextMeter` 并排），并不是 composer 的纵向列，所以卡片的宽度必须内联声明（`flex:1 1 100%` + `min-width:0` + `align-self:stretch`），不能依赖注入的样式表——这一点在宿主版本间变过（旧版把 dock 直接挂在纵向的 `.root` 下）。
 
 ### Host routes
 
@@ -243,6 +243,7 @@ drift fails a test rather than a user's command.
 | `403` from a browser | The page is not this GUI (foreign Origin/Host) | Use the URL printed by `dsh web` |
 | `404` on a `GET` to a route | Routes are POST-only | Use POST with a JSON body |
 | `shell.run is not a function` (or `execute`) | The deployment's shell service exposes the other execution door | Fixed since 1.2.0 — the plugin tries `execute()` then `run()` |
+| Result card spans only part of the row | `conversation.composer.dock` is a **horizontal** flex row shared with the host's `ContextMeter`, not the composer column, so an external `width:100%` does not fill it | Fixed since 1.2.1 — the card carries `flex:1 1 100%` (plus `min-width:0`, `align-self:stretch`) inline, so its width no longer depends on the injected stylesheet |
 | Input box never turns red | The browser half did not load or did not register | Open DevTools and check for a `cli-mode` error; the classic cause is a missing global (`document`) throwing at the top of `apply`, which the current build guards against |
 
 ## Why the routes ride `ctx.inject`

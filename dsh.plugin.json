@@ -1,7 +1,7 @@
 {
   "name": "dsh-cli-mode",
   "description": "Command-line mode for the DeepSeek Harness web GUI composer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "entry": {
     "name": "dsh-cli-mode",
     "inject": []
