@@ -105,13 +105,19 @@ exportsObject.apply({
   inject(names, callback) { callback({ slots }) },
   effect(factory) { effects.push(factory()) },
 })
-check('both slots are addressed', addressed.join(',') === 'conversation.input.overlay,conversation.composer.dock', addressed.join(','))
+check('both slots are addressed', addressed.join(',') === 'conversation.input.overlay,conversation.input.dock', addressed.join(','))
 check('two entries are registered', entries.length === 2, entries.map((e) => e.options.name).join(', '))
 
 const watcher = entries.find((e) => e.options.id === 'cli-mode-watcher')
 const dock = entries.find((e) => e.options.id === 'cli-mode-result')
 check('watcher sits in the composer overlay', watcher.options.name === 'conversation.input.overlay', watcher.options.name)
-check('result card sits in the always-visible composer dock', dock.options.name === 'conversation.composer.dock', dock.options.name)
+// `conversation.input.dock` is the platform's full-width seat above the composer
+// card (TodoDock, QueueDock, goal strip). `conversation.composer.dock` is the
+// ambient ROW shared with `stats` and `cost-meter`, where a card only ever got a
+// slice of the line — the reported "half the row" bug.
+check('result card uses the full-width input dock, not the ambient row',
+  dock.options.name === 'conversation.input.dock' && dock.options.order === 50,
+  dock.options.name + ' @' + String(dock.options.order))
 
 // ---- ModeWatcher: red mode + gate capture ----
 const setDraftCalls = []
@@ -185,10 +191,9 @@ const deepText = (node, out = []) => {
 const text = deepText(dockTree).join(' | ')
 check('result card reports the executed command', text.includes('命令已执行') && text.includes('npm --version') && text.includes('fixture-stdout'), text.slice(0, 200))
 
-// The dock slot is a HORIZONTAL flex row shared with the host's ContextMeter, so
-// the card must carry its full-row layout inline instead of relying on the
-// injected stylesheet (a deployment was reported where only part of the row was
-// used because the row is a flex context, not the composer column).
+// Full width must not depend on the injected stylesheet: the card carries the
+// composer card's own inset calc inline (a deployment was reported where only
+// part of the row was used).
 const findCard = (node) => {
   if (node === null || node === undefined || typeof node !== 'object') return undefined
   if (Array.isArray(node)) {
@@ -202,9 +207,10 @@ const findCard = (node) => {
 }
 const card = findCard(dockTree)
 const cardStyle = card === undefined ? {} : (card.props.style ?? {})
-check('card fills the dock row with inline flex (not stylesheet-dependent)',
-  cardStyle.flex === '1 1 100%' && cardStyle.alignSelf === 'stretch' && cardStyle.width === '100%' &&
-  cardStyle.minWidth === 0 && typeof cardStyle.maxWidth === 'string' && cardStyle.maxWidth.includes('--dsh-composer-card-max-width'),
+check('card spans the row via the composer inset calc (inline, not stylesheet-dependent)',
+  cardStyle.boxSizing === 'border-box' && cardStyle.flex === 'none' && cardStyle.margin === '0 auto' &&
+  typeof cardStyle.width === 'string' && cardStyle.width.includes('--dsh-composer-side-clearance') &&
+  typeof cardStyle.maxWidth === 'string' && cardStyle.maxWidth.includes('--dsh-composer-card-max-width'),
   JSON.stringify(cardStyle))
 check('card carries the full-width hook and a state accent', card !== undefined && card.props['data-full-width'] === 'true' && typeof cardStyle.borderLeft === 'string' && cardStyle.borderLeft.includes('3px solid'), JSON.stringify({ hook: card?.props['data-full-width'], borderLeft: cardStyle.borderLeft }))
 

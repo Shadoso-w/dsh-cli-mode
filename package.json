@@ -1,7 +1,7 @@
 {
   "name": "dsh-cli-mode",
   "description": "Command-line mode for the DeepSeek Harness web GUI: a composer line starting with ！ or ! runs as a real command in the session workspace instead of being sent to the model",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "license": "MIT",
   "author": "Shadoso",
   "repository": {

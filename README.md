@@ -28,7 +28,10 @@ dsh-cli-mode/
 
 - **Host 半**是普通 ESM cordis 插件（`export const name` + `export function apply(ctx)`），只通过 `ctx.get()` 读取 `webServer` / `shell` / `sessions` / `sandboxPolicy`，不引入任何 `@deepseek-ai/*` 依赖。
 - **浏览器半**手写在 lazy-CJS 客户端包协议里（`window.__ModuleLoader__.load({ id, factory })`），因此**不需要构建步骤**；`require` 只取平台种子模块（`react`），与 Host 的通信使用同源 `fetch` 到插件自己的路由。
-- 两个插槽：`conversation.input.overlay`（list，监听草稿以切换红色模式）与 `conversation.composer.dock`（list，结果卡）。**注意 `composer.dock` 在宿主里是横向 flex 行**（与宿主的 `ContextMeter` 并排），并不是 composer 的纵向列，所以卡片的宽度必须内联声明（`flex:1 1 100%` + `min-width:0` + `align-self:stretch`），不能依赖注入的样式表——这一点在宿主版本间变过（旧版把 dock 直接挂在纵向的 `.root` 下）。
+- 两个插槽：`conversation.input.overlay`（list，监听草稿以切换红色模式）与 **`conversation.input.dock`**（list，结果卡）。
+  - `conversation.input.dock` 的官方用途是 **"Full-width entries above the composer card"**，平台自己的 TodoDock / QueueDock / goal 条都注册在这里，其容器 `composerStack` 是纵向 flex，所以子元素天然全宽。卡片再用与 composer 卡片相同的内缩计算（`calc(100% - 2×var(--dsh-composer-side-clearance))` + `max-width:var(--dsh-composer-card-max-width)`）对齐输入框宽度。
+  - **不要用 `conversation.composer.dock`**：它的官方用途是 "Ambient entries **below** the composer card"，实际是一条**横向 flex 行**，里面并排着宿主的 `stats`（轮次/用量/成本）与 `cost-meter`。卡片放在那里只能分到那条行的一部分（这正是"只占一半行宽"的成因）。这个布局在宿主版本间变过：旧版把 dock 直接挂在纵向的 `.root` 下。
+  - 卡片的宽度等布局全部**内联**，不依赖注入的样式表。
 
 ### Host routes
 
@@ -243,7 +246,7 @@ drift fails a test rather than a user's command.
 | `403` from a browser | The page is not this GUI (foreign Origin/Host) | Use the URL printed by `dsh web` |
 | `404` on a `GET` to a route | Routes are POST-only | Use POST with a JSON body |
 | `shell.run is not a function` (or `execute`) | The deployment's shell service exposes the other execution door | Fixed since 1.2.0 — the plugin tries `execute()` then `run()` |
-| Result card spans only part of the row | `conversation.composer.dock` is a **horizontal** flex row shared with the host's `ContextMeter`, not the composer column, so an external `width:100%` does not fill it | Fixed since 1.2.1 — the card carries `flex:1 1 100%` (plus `min-width:0`, `align-self:stretch`) inline, so its width no longer depends on the injected stylesheet |
+| Result card spans only part of the row | The card was registered in `conversation.composer.dock`, which is the host's **ambient row** — a horizontal flex line shared with `stats` and `cost-meter` — so a card there only ever gets a slice | Fixed since 1.3.0 — the card now uses `conversation.input.dock` ("Full-width entries above the composer card", the seat TodoDock/QueueDock use); its container is a column flex, so it spans the width |
 | Input box never turns red | The browser half did not load or did not register | Open DevTools and check for a `cli-mode` error; the classic cause is a missing global (`document`) throwing at the top of `apply`, which the current build guards against |
 
 ## Why the routes ride `ctx.inject`
